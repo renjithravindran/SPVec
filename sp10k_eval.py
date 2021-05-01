@@ -29,7 +29,8 @@ class SP_Eval:
             'ws':'window-size',
             'dim':'dimension',
             'tw':'term-weight',
-            'p':'exponential-weight'
+            'p':'exponential-weight',
+            'min':'min-count'
         }
         
         self.modelfiles = {}
@@ -50,13 +51,11 @@ class SP_Eval:
             use this to exclude winograd files
         """
         sp10k_data = {}
-        file_names = glob(path+'/*annotation*')
-        
+        file_names = glob(str(Path(path,'*annotation*')))
         for file_name in file_names:
-            cat = file_name.split("/")[2].replace("_annotation.txt",'')
+            cat = Path(file_name).parts[-1].replace("_annotation.txt",'')
             # sp-10k categories: 'dobj','amod','nsubj','nsubj_amod','dobj_amod',
             # 'wino_dobj_amod', 'wino_nsubj_amod'
-            
             if any([exclude_str in cat for exclude_str in exclude]):
                 # exclude any category
                 # basically to exclude the winograd files
@@ -128,6 +127,7 @@ class SP_Eval:
                     self.modelfiles[model_class].append((params,filename))
         else:
             raise ValueError('only directories, not regular files')
+        
         
         
     def evaluate(self):
@@ -340,3 +340,153 @@ class SP_Model:
         score=1 - self.model.distance(word1,word2)
         return score    
     
+    
+class SP_Query:
+    
+    def __init__(self,model_path,model_select=None):
+        """
+        
+        parameters
+        ----------
+        model_path : str
+            path to model file or directory with many models
+            
+        model_select : dict
+            a dict of parameter names and values, used 
+            to select model files from a directory
+        
+        """
+        self.models ={}
+        self.models_selected = []
+        #selected model filenames
+        
+        if model_select is None:
+            model_select=()
+        else:
+            model_select = tuple(model_select.items())
+        
+        model_filenames = []
+        models_selected = []
+        
+        
+        if Path(model_path).is_dir():
+            model_filenames = glob(str(Path(model_path,'*.vec')))
+        else:
+            model_filenames = [model_path]
+        
+        for model_filename in model_filenames:
+            if all([param+':'+str(value) in model_filename for param,value  in model_select]):
+                self.models_selected.append(model_filename)
+                
+        if len(models_selected) > 4:
+            print("no more than 4 models..",len(models_selected),'given')
+        
+        for model_filename in self.models_selected:
+            params_values = self.get_model_params(model_filename)
+            self.models[params_values] = KeyedVectors.load_word2vec_format(model_filename,binary=False)
+    
+#    def get_associations(self,word,which='both'):
+#        """
+#        parameters
+#        ---------
+#        
+#        word : str
+#        
+#        which : str, default='both'
+#            'left' to get left associations
+#            'right' to get right asociations
+#            'both' to get both left and right associations
+#        """
+#        
+#        model = list(self.models.values())[0]
+#        left_associates = []
+#        right_associates = []
+#        
+#        if which == 'both':
+#            for word_ in model.vocab:
+#                if word_[-2:] == '_l'
+#                    sim=model.similarity(word+'_r',word_)
+#                    right_associates.append((word_.replace('_l',''),sim))
+#                elif word_[-2:] == '_r'
+#                    sim=model.similarity(word+'_l',word_)
+#                    left_associates.append((word_.replace('_r',''),sim))
+#            
+#        
+#        left_associates = sorted(left_associates,key=lambda x:x[1],reverse=True)[:100]
+#        right_associates = sorted(right_associates,key=lambda x:x[1],reverse=True)[:100]
+#        print(left_associates)
+#    
+    def get_model_params(self,filename):
+        """
+        """
+        params = ['tw','wt','ws','dim','p']
+        
+        params_values = [part.split(":") for part in  filename.split("_")]
+        params_values = [part for part in params_values if len(part) is 2]
+        params_values = [(param,value) for param,value in params_values if param in params]
+       
+        return tuple(params_values)
+        
+
+    def get_associations(self,word,model_key=None,n=100,print_=True):
+        """
+        parameters
+        --------
+        word : str
+        
+        model_key : str
+            the paramter value that can index the model
+            model_key should index exactly one model
+        """
+
+        words_l = {}
+        words_r = {}
+        model = None
+        associations ={}
+        
+        if model_key is None and len(self.models)>1:
+            raise ValueError("more than one model available, provide model_key")
+        elif model_key is None and len(self.models)==1:
+            model = list(self.models.values())[0]
+            
+        elif model_key is not None:
+            for model_params,model_ in self.models.items():
+                for param,value in model_params:
+                    if model_key == value:
+                        if model is None:
+                            model = model_
+                        else:
+                            raise ValueError("more than one model with",model_key)
+        else:
+            raise ValueError("This should not happen")
+    
+        
+        for word_,sim in model.similar_by_word(word+'_l',topn=2000):
+            if '_r' in word_:
+                words_l[word_.replace('_r','')] = sim
+        for word_,sim in model.similar_by_word(word+'_r',topn=2000):
+            if '_l' in word_:
+                words_r[word_.replace('_l','')] = sim
+
+        words_l_ = set(words_l.keys())
+        words_r_ = set(words_r.keys()) 
+
+        wordsL = list(words_l_ - words_r_)
+        wordsR = list(words_r_ - words_l_)
+        #removing common words
+
+        wordsL = sorted(wordsL,key=lambda x: words_l[x],reverse=True)
+        wordsR = sorted(wordsR,key=lambda x: words_r[x],reverse=True)
+
+        if print_:
+            print("left:",", ".join(wordsL[:n]))
+            print("")
+            print("right:",", ".join(wordsR[:n]))
+        else:
+            associations['left']=wordsL[:n]
+            associations['right']=wordsR[:n]
+            
+            return (associations)
+        
+        
+ 

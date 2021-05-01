@@ -81,7 +81,7 @@ total_coocs_ = ''
 chunks_ = []
 #--------
 
-class CMDVec:
+class SPVec:
     """
     Parameters
     ----------
@@ -334,18 +334,18 @@ class CMDVec:
         """
         
         if term_weight == "raw":
-            if 'raw' not in self.tsvd_factors:
+            if ('raw',dim) not in self.tsvd_factors:
                 # check if we have factorized yet
                 u,s,vt = self.factorize(self.coocs_raw.todense(),dim)
-                self.tsvd_factors['raw'] = (u,s,vt)
+                self.tsvd_factors[('raw',dim)] = (u,s,vt)
                 # save the factors
-            u,s,vt = self.tsvd_factors['raw']
+            u,s,vt = self.tsvd_factors[('raw',dim)]
             
         elif term_weight == "log":
-            if 'log' not in self.tsvd_factors:
+            if ('log',dim) not in self.tsvd_factors:
                 u,s,vt = self.factorize(self.coocs_raw.log1p().todense(),dim)
-                self.tsvd_factors['log'] = (u,s,vt)
-            u,s,vt = self.tsvd_factors['log']
+                self.tsvd_factors[('log',dim)] = (u,s,vt)
+            u,s,vt = self.tsvd_factors[('log',dim)]
             
         elif term_weight == "pmi":
             if self.coocs_pmi.data.nbytes == 0:
@@ -353,13 +353,13 @@ class CMDVec:
                 self.make_pmiMat()
                 u,s,vt = self.factorize(self.coocs_pmi.todense(),dim)
                 self.tsvd_factors['pmi'] = (u,s,vt)
-            elif 'pmi' not in self.tsvd_factors:
+            elif ('pmi',dim) not in self.tsvd_factors:
                 #pmi is computed but not factorized yet
                 u,s,vt = self.factorize(self.coocs_pmi.todense(),dim)
-                self.tsvd_factors['pmi'] = (u,s,vt)
+                self.tsvd_factors[('pmi',dim)] = (u,s,vt)
             else:
                 #pmi is computed and also factorized
-                u,s,vt = self.tsvd_factors['pmi']
+                u,s,vt = self.tsvd_factors[('pmi',dim)]
                 
         elif term_weight == 'ppmi':
             if self.coocs_ppmi.data.nbytes == 0:
@@ -367,13 +367,13 @@ class CMDVec:
                 self.make_ppmiMat()
                 u,s,vt = self.factorize(self.coocs_ppmi.todense(),dim)
                 self.tsvd_factors['ppmi'] = (u,s,vt)
-            elif 'ppmi' not in self.tsvd_factors:
+            elif ('ppmi',dim) not in self.tsvd_factors:
                 #ppmi is computed but not factorized yet
                 u,s,vt = self.factorize(self.coocs_ppmi.todense(),dim)
-                self.tsvd_factors['ppmi'] = (u,s,vt)
+                self.tsvd_factors[('ppmi',dim)] = (u,s,vt)
             else:
                 #ppmi is computed and also factorized
-                u,s,vt = self.tsvd_factors['ppmi']
+                u,s,vt = self.tsvd_factors[('ppmi',dim)]
             
         else:
             raise ValueError("un-recognized term-weight")
@@ -391,14 +391,12 @@ class CMDVec:
             raise ValueError
         #final embeddings
         print("..done")
-        
-        param_str = "{}_wt:{}_ws:{}_tw:{}_dim:{}_p:{}".format(self.model_prefix,self.windowtype,
+        param_str = "{}_wt:{}_ws:{}_tw:{}_dim:{}_p:{}_".format(self.model_prefix,self.windowtype,
                                  self.windowsize,term_weight,dim,p) 
-        
         if save_to != None:
             if not Path(save_to).is_dir():
                 save_to = "./" 
-            filename = Path(save_to,param_str).with_suffix(".vec")
+            filename = str(Path(save_to,param_str))+".vec"
             if self.windowtype ==  'par':
                 self.save_w2v_format_par(emb,filename)
             else:
@@ -585,49 +583,6 @@ def ppmi_worker(chunk_id):
     
     return vals,rows,cols
 
-def make_syntagmatic_embs(corpus_filename='', save_to='./models/cmd_syn/',dim=100,windowsize=4,term_weight='pmi',p=0,model_prefix='cmd_bnc_min:100'):
-    """
-    """
-    
-    # make left embeddings 
-    mod = CMDVec(corpus_filename=corpus_filename,windowtype='l',windowsize=windowsize,jobs=20,
-                  model_prefix=model_prefix)
-    emb_l = mod.make_lr_embeddings(term_weight=term_weight,p=p)
-    
-    # make right embeddings
-    mod = CMDVec(corpus_filename=corpus_filename,windowtype='r',windowsize=windowsize,jobs=20,
-                  model_prefix=model_prefix)
-    emb_r = mod.make_lr_embeddings(term_weight=term_weight,p=p)
-    
-    #words
-    vocab =  list(mod.word2id.keys())
-    
-    word_count,dim = emb_r.shape
-
-    param_str = "{}_wt:{}_ws:{}_tw:{}_dim:{}_p:{}".format(model_prefix,"syn",
-                                 windowsize,term_weight,dim,p) 
-    filename = Path(save_to,param_str).with_suffix(".vec")
-    print("saving embeddings to disk at",filename)
-
-    with open(filename,"w") as f_:
-        print(word_count*2,dim,file=f_)
-        for i in range(word_count):
-            word = vocab[i]
-            print(word+"_l",end=' ',file=f_)
-            for j in range(dim):
-                print("{:.4f}".format(emb_l[i,j]),end=" ",file=f_)
-            print(file=f_)
-            
-            print(word+"_r",end=' ',file=f_)
-            for j in range(dim):
-                print("{:.4f}".format(emb_r[i,j]),end=" ",file=f_)
-            print(file=f_)
-
-    print("..done")
 
 
-
-
-
-
-
+        
