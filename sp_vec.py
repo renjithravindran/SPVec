@@ -4,6 +4,26 @@ from Co-occurence Matrix Decomposition
 ----------------------------------
 renjith p ravindran 2021
 
+Syntagmatic representations are directional(left/right) embeddings,
+each word thus has a left embedding and a right embedding.
+left embedding of a word is the reprsentation of a word
+with respect to words that appear to its left and simialry 
+right embedding represents a words right context.
+
+To get the syntagmtic association of w1 to the left of w2,
+perform cosine similarity between w1.right and wi2.left
+
+Syntagatic representations are useful for learning
+selectional preference, hence SPVec can also stanf for
+Selectional Preferernce Vectors
+
+
+Paradigmatic representations are similar to
+embeddings such as word2vec and glove,
+where the context is symmetric and thus
+no distinction between left and rigth context, 
+yeildng just one embedding per word
+
 Gives SVD factorized Low Rank Word Embeddings from
 1) raw co-ccurrence frequency
 2) Log co-occurrence frequency
