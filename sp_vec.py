@@ -65,6 +65,8 @@ from sklearn.utils.extmath import randomized_svd, safe_sparse_dot, svd_flip
 # randomized_svd gives all components, so we use that.
 
 
+from sparsesvd import sparsesvd
+
 #--- global vars to offload class data for efficient access by concurrent futures.
 # the data in these come from corresponding vars in class object
 # but having concurrent futures access class varibales drastically impacts throughput
@@ -304,17 +306,24 @@ class SPVec:
         
         print("..done")
         
-    def factorize(self,data_matrix,rank):
+    def factorize(self,data_matrix,rank,sparse=False):
         """
         using sk-learn randomized svd
         """
         
-        print("factorizing")
-        u,s,vt = randomized_svd(data_matrix,rank) 
+        if sparse:
+            print("factorizing sparse")
+            u,s,vt = sparsesvd(data_matrix.tocsc(),rank)
+            #u is actually ut
+            u=u.transpose()
+        else:
+            print("factorizing dense")
+            u,s,vt = randomized_svd(data_matrix.todense(),rank) 
+        
         print("..done")
         return u,s,vt
         
-    def make_lr_embeddings(self,save_to=None,term_weight='pmi',dim=100,p=1):
+    def make_lr_embeddings(self,save_to=None,term_weight='pmi',dim=100,p=1,sparse=False):
         """
         make low rank embeddings using truncated SVD
         
@@ -336,14 +345,14 @@ class SPVec:
         if term_weight == "raw":
             if ('raw',dim) not in self.tsvd_factors:
                 # check if we have factorized yet
-                u,s,vt = self.factorize(self.coocs_raw.todense(),dim)
+                u,s,vt = self.factorize(self.coocs_raw,dim,sparse=sparse)
                 self.tsvd_factors[('raw',dim)] = (u,s,vt)
                 # save the factors
             u,s,vt = self.tsvd_factors[('raw',dim)]
             
         elif term_weight == "log":
             if ('log',dim) not in self.tsvd_factors:
-                u,s,vt = self.factorize(self.coocs_raw.log1p().todense(),dim)
+                u,s,vt = self.factorize(self.coocs_raw.log1p(),dim,sparse=sparse)
                 self.tsvd_factors[('log',dim)] = (u,s,vt)
             u,s,vt = self.tsvd_factors[('log',dim)]
             
@@ -351,11 +360,11 @@ class SPVec:
             if self.coocs_pmi.data.nbytes == 0:
                 #check if pmi is not computed yet
                 self.make_pmiMat()
-                u,s,vt = self.factorize(self.coocs_pmi.todense(),dim)
+                u,s,vt = self.factorize(self.coocs_pmi,dim,sparse = sparse)
                 self.tsvd_factors['pmi'] = (u,s,vt)
             elif ('pmi',dim) not in self.tsvd_factors:
                 #pmi is computed but not factorized yet
-                u,s,vt = self.factorize(self.coocs_pmi.todense(),dim)
+                u,s,vt = self.factorize(self.coocs_pmi,dim,sparse = sparse)
                 self.tsvd_factors[('pmi',dim)] = (u,s,vt)
             else:
                 #pmi is computed and also factorized
@@ -365,11 +374,11 @@ class SPVec:
             if self.coocs_ppmi.data.nbytes == 0:
                 #check if ppmi is not computed yet
                 self.make_ppmiMat()
-                u,s,vt = self.factorize(self.coocs_ppmi.todense(),dim)
+                u,s,vt = self.factorize(self.coocs_ppmi,dim,sparse = sparse)
                 self.tsvd_factors['ppmi'] = (u,s,vt)
             elif ('ppmi',dim) not in self.tsvd_factors:
                 #ppmi is computed but not factorized yet
-                u,s,vt = self.factorize(self.coocs_ppmi.todense(),dim)
+                u,s,vt = self.factorize(self.coocs_ppmi,dim,sparse = sparse)
                 self.tsvd_factors[('ppmi',dim)] = (u,s,vt)
             else:
                 #ppmi is computed and also factorized
