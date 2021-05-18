@@ -695,6 +695,6 @@ def ppmi_worker(chunk_id):
 if __name__ == '__main__':
 
 
-    spvec = SPVec(corpus_filename='bnc_mincount1000.txt', windowtype='syn',
+    spvec = SPVec(corpus_filename='../corpus/bnc_mincount100.txt', windowtype='syn',
             windowsize=3, jobs=1, model_prefix='spvec_bnc')
-    spvec.make_lr_embeddings()
+    spvec.make_lr_embeddings(sparse=True)
