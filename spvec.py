@@ -54,7 +54,12 @@ NOTE:
 1)  Currently SPVec expects a pre-processed corpus.
     Common corpus processing such as lower-casing,
     numerals-removal, min-counting etc should be done in prior.
-2)  The corpus should be small enough to be loaded to RAM
+
+TODO:
+1)  Write tests fo PMI and PPMI computations
+2)  Parallel reduce for co-occurrence counting
+3)  Varify PPMI sparse factorisation with stores 0s is
+    same as ith stored 0s removed.
 
 """
 
@@ -65,6 +70,9 @@ import pickle
 from pathlib import Path
 from timeit import default_timer
 from datetime import timedelta
+from array import array
+import argparse
+from multiprocessing import cpu_count
 
 from scipy.sparse import csr_matrix, coo_matrix
 # sparsity heavy lifting!!
@@ -108,17 +116,17 @@ class SPVec:
     """
     Example Usage
     -------
-    >>> spvec = SPVec(corpus_file='pre-processed-bnc.txt', windowtype='syn',
+    >>> spvec = SPVec(corpus_file='pre-processed-bnc.txt', modeltype='syn',
             windowsize=3, jobs=5, model_prefix='spvec_bnc')
-    >>> spvec.make_lr_embeddings()
+    >>> spvec.make_embeddings(term_weight='log',dim=300,p=0.5)
     """
     
     def __init__(self,corpus_filename=None,model_filename=None,\
-                 windowtype='par',windowsize=3,jobs=10,model_prefix='spvec'):
+                 modeltype='par',windowsize=3,jobs=int(cpu_count()/2),model_prefix='spvec'):
         """
         Parameters
         ----------
-        jobs : int, default=10
+        jobs : int, default=all
             no of parallel jobs
             
         corpus_filename : String 
@@ -133,7 +141,7 @@ class SPVec:
             **either corpus_filename or model_filename must be given**
             **if corpus_filename is given, consider the following parameters also**
             
-        windowtype: String, default='par'
+        modeltype: String, default='par'
              'syn': syntagmatic vectors
              'par': paradigmatic vectors
             
@@ -155,7 +163,7 @@ class SPVec:
             self.model_prefix = model_prefix
             self.corpus_filename = corpus_filename
             self.windowsize = windowsize
-            self.windowtype =  windowtype
+            self.modeltype =  modeltype
 
             self.word2id = {}
             # word to integer mapping
@@ -166,11 +174,7 @@ class SPVec:
             # in memory corpus with wordids
             # stored outside the class as only then will it work with parallel futures 
 
-            print("making vocab")
-            starttime =  default_timer()
             self.make_vocab()
-            delta =  default_timer() - starttime
-            print("..done ({})".format(timedelta(seconds=delta)))
 
             shape = (self.vocabsize,self.vocabsize)
             self.coocs_raw = csr_matrix(shape,dtype = np.dtype('u4'))
@@ -188,11 +192,7 @@ class SPVec:
             self.tsvd_factors = {}
             # keeping factor matrices from truncated SVD
 
-            print("counting co-occurrences")
-            starttime = default_timer()
             self.count_coocs()
-            delta = default_timer() - starttime
-            print("..done ({})".format(timedelta(seconds=delta)))
     
         elif model_filename is not None:
             self.load_cooc_model(model_filename)
@@ -206,13 +206,16 @@ class SPVec:
         and stores corpus in memory as list of list of ids
         """
 
+        print("making vocab...")
+        starttime =  default_timer()
+
         wordid = 0
         with open(self.corpus_filename) as file_:
             for line in file_:
                 line = line.strip().split()
                 # simple tokenize
                 
-                line_ = []
+                line_ = array('i')
                 # line with wordids, for in-memory corpus
                 
                 if len(line) == 1:
@@ -232,6 +235,10 @@ class SPVec:
                 
         self.vocabsize = len(self.word2id)
 
+        delta = default_timer() - starttime
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
+ 
         
     def count_coocs(self):
         """
@@ -240,6 +247,9 @@ class SPVec:
         of the corpus to work on
         """
         
+        print("counting co-occurrences...")
+        starttime = default_timer()
+
         global coocs_raw_
         global chunks_
         global corpus_
@@ -251,9 +261,9 @@ class SPVec:
             chunks_=[list(lines) for lines in divide(self.jobs,range(len(self.corpus)))]
             ws = self.windowsize
             vs = self.vocabsize
-            wt = self.windowtype
+            mt = self.modeltype
             
-            futures={executor.submit(coocs_worker,chunk_id,ws,wt,vs)\
+            futures={executor.submit(coocs_worker,chunk_id,ws,mt,vs)\
                                          for chunk_id in range(len(chunks_))}
             for future in concurrent.futures.as_completed(futures):
                 coocs_chunk=future.result()
@@ -264,6 +274,9 @@ class SPVec:
         
         corpus_ = ''
         # resetting
+        delta = default_timer() - starttime
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
    
 
     def make_pmiMat(self):
@@ -279,7 +292,7 @@ class SPVec:
         coocs_raw_ = self.coocs_raw
         # offloading
 
-        print("computing pmi")
+        print("computing pmi...")
         starttime = default_timer()
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -312,7 +325,8 @@ class SPVec:
         chunks_ = ''
         
         delta = default_timer() - starttime
-        print("..done ({})".format(timedelta(seconds=delta)))
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
    
 
     def make_ppmiMat(self):
@@ -324,15 +338,15 @@ class SPVec:
         
         global chunks_
         
-        ppmi_vals = []
-        ppmi_rows = []
-        ppmi_cols = []
+        ppmi_vals = array('f') 
+        ppmi_rows = array('i')
+        ppmi_cols = array('i')
         
         if self.coocs_pmi.data.nbytes == 0:
             # check if pmi is computed yet
             self.make_pmiMat()
         
-        print("transforming to ppmi")
+        print("transforming to ppmi...")
         starttime = default_timer()
 
         pmi_coo =  self.coocs_pmi.tocoo()
@@ -362,33 +376,35 @@ class SPVec:
         #resetting 
         
         delta = default_timer() - starttime
-        print("..done ({})".format(timedelta(seconds=delta)))
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
     
 
-    def factorize(self,data_matrix,num_factors,sparse=False):
+    def factorize(self,data_matrix,num_factors):
         """
         perform truncated svd using either sklearn's randomized_svd
         or Radim's sparsesvd
         """
 
+        print("factorizing...")
         starttime = default_timer()
-
-        if sparse:
-            print("factorizing sparse")
+        try:
+            u,s,vt = randomized_svd(data_matrix.todense(),num_factors) 
+        except MemoryError:
+            print("Out of Memory, switching to single threaded sparse factorisation")
+            print("Go get a drink, relax...")
             u,s,vt = sparsesvd(data_matrix.tocsc(),num_factors)
             #u is actually ut
             u = u.transpose()
-        else:
-            print("factorizing dense")
-            u,s,vt = randomized_svd(data_matrix.todense(),num_factors) 
-        
+
         delta = default_timer() - starttime
-        print("..done ({})".format(timedelta(seconds=delta)))
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
 
         return u,s,vt
     
 
-    def make_lr_embeddings(self,save_to="./",term_weight='log',dim=300,p=0.5,sparse=False):
+    def make_embeddings(self,save_to="./",term_weight='log',dim=300,p=0.5):
         """
         make low rank embeddings using truncated SVD
         
@@ -408,22 +424,19 @@ class SPVec:
         p: int, default=0.5
             scaling power factor of the singular vectors
             
-        sparse: bool, default=False
-            if true uses sparsesvd for factorisation
-            else uses randomized_svd from sklearn
         """
 
         if term_weight == "raw":
             if ('raw',dim) not in self.tsvd_factors:
                 # check if we have factorized yet
-                u,s,vt = self.factorize(self.coocs_raw,dim,sparse=sparse)
+                u,s,vt = self.factorize(self.coocs_raw,dim)
                 self.tsvd_factors[('raw',dim)] = (u,s,vt)
                 # save the factors
             u,s,vt = self.tsvd_factors[('raw',dim)]
             
         elif term_weight == "log":
             if ('log',dim) not in self.tsvd_factors:
-                u,s,vt = self.factorize(self.coocs_raw.log1p(),dim,sparse=sparse)
+                u,s,vt = self.factorize(self.coocs_raw.log1p(),dim)
                 self.tsvd_factors[('log',dim)] = (u,s,vt)
             u,s,vt = self.tsvd_factors[('log',dim)]
             
@@ -431,11 +444,11 @@ class SPVec:
             if self.coocs_pmi.data.nbytes == 0:
                 #check if pmi is not computed yet
                 self.make_pmiMat()
-                u,s,vt = self.factorize(self.coocs_pmi,dim,sparse = sparse)
+                u,s,vt = self.factorize(self.coocs_pmi,dim)
                 self.tsvd_factors['pmi'] = (u,s,vt)
             elif ('pmi',dim) not in self.tsvd_factors:
                 #pmi is computed but not factorized yet
-                u,s,vt = self.factorize(self.coocs_pmi,dim,sparse = sparse)
+                u,s,vt = self.factorize(self.coocs_pmi,dim)
                 self.tsvd_factors[('pmi',dim)] = (u,s,vt)
             else:
                 #pmi is computed and also factorized
@@ -445,11 +458,11 @@ class SPVec:
             if self.coocs_ppmi.data.nbytes == 0:
                 #check if ppmi is not computed yet
                 self.make_ppmiMat()
-                u,s,vt = self.factorize(self.coocs_ppmi,dim,sparse = sparse)
+                u,s,vt = self.factorize(self.coocs_ppmi,dim)
                 self.tsvd_factors['ppmi'] = (u,s,vt)
             elif ('ppmi',dim) not in self.tsvd_factors:
                 #ppmi is computed but not factorized yet
-                u,s,vt = self.factorize(self.coocs_ppmi,dim,sparse = sparse)
+                u,s,vt = self.factorize(self.coocs_ppmi,dim)
                 self.tsvd_factors[('ppmi',dim)] = (u,s,vt)
             else:
                 #ppmi is computed and also factorized
@@ -458,24 +471,19 @@ class SPVec:
         else:
             raise ValueError("un-recognized term-weight")
         
-        print("making embeddings")
-        starttime = default_timer()
 
         s = s**p
         # scaling eigen values with scale factor
         
-        if self.windowtype == 'par':
+        if self.modeltype == 'par':
             emb = u*s
-        elif self.windowtype == 'syn':
+        elif self.modeltype == 'syn':
             emb_l = u*s
             emb_r = s*vt.transpose()
         else:
             raise ValueError
 
-        delta = default_timer() - starttime
-        print("..done ({})".format(timedelta(seconds=delta)))
-
-        param_str = "{}_wt:{}_ws:{}_tw:{}_dim:{}_p:{}_".format(self.model_prefix,self.windowtype,
+        param_str = "{}_mt:{}_ws:{}_tw:{}_dim:{}_p:{}_".format(self.model_prefix,self.modeltype,
                                  self.windowsize,term_weight,dim,p) 
         if save_to != None:
             if Path(save_to).is_dir():
@@ -483,12 +491,12 @@ class SPVec:
             else:
                 filename = save_to
 
-            if self.windowtype == 'par':
+            if self.modeltype == 'par':
                 self.save_w2v_format_par(emb,filename)
             else:
                 self.save_w2v_format_syn(emb_l=emb_l,emb_r=emb_r,filename=filename)
         else:
-            if self.windowtype == 'par':
+            if self.modeltype == 'par':
                 return emb
             else:
                 return emb_l,emb_r
@@ -521,7 +529,8 @@ class SPVec:
                 print(file=f_)
                 
         delta = default_timer() - starttime
-        print("..done ({})".format(timedelta(seconds=delta)))
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
    
 
     def save_w2v_format_par(self,emb,filename="file.vec"):
@@ -545,7 +554,8 @@ class SPVec:
                 print(file=f_)
                 
         delta = default_timer() - starttime
-        print("..done ({})".format(timedelta(seconds=delta)))
+        delta = str(timedelta(seconds=delta)).split('.')[0] 
+        print("done ({})".format(delta))
         
 
     def save_cooc_model(self,model_filename='model'):
@@ -578,19 +588,19 @@ class SPVec:
             self.make_pmiMat()
             
 
-def coocs_worker(chunk_id,windowsize,windowtype,vocabsize):
+def coocs_worker(chunk_id,windowsize,modeltype,vocabsize):
     """
     parallel worker using coo matrix
     """
 
-    coocs_i=[]
-    coocs_j=[]
+    coocs_i = array('i')
+    coocs_j = array('i')
 
     global chunks_
     
-    if windowtype == 'par':
+    if modeltype == 'par':
         window = lambda i : range(i - windowsize, i + windowsize +1)
-    elif windowtype == 'syn':
+    elif modeltype == 'syn':
         window = lambda i : range(i - windowsize, i + 1)
     else:
         raise ValueError
@@ -646,9 +656,9 @@ def pmi_worker2(chunk_id,vocabsize):
     global word_coocs_
     global chunks_
     
-    pmi_vals = []
-    rows = []
-    cols = []
+    pmi_vals = array('f')
+    rows = array('i')
+    cols = array('i')
     
     for i,j in chunks_[chunk_id]:
         ij_cooc = coocs_raw_[i,j]
@@ -678,9 +688,9 @@ def ppmi_worker(chunk_id):
     
     global chunks_
     
-    vals = []
-    rows = []
-    cols = []
+    vals = array('f')
+    rows = array('i')
+    cols = array('i')
     
     for val,row,col in chunks_[chunk_id]:
         if val > 0:
@@ -693,8 +703,85 @@ def ppmi_worker(chunk_id):
 
 
 if __name__ == '__main__':
+    """
+    """
+    desc="""SPVec: Syntagmtic and Paradigmatic Word Embeddings
+from word co-occurrence matrix decompostion.
+------
+renjith p ravindran 2021
+"""
+    
+    save_to_help="""either a directory or a full filename. if directory the fileame 
+will be formatted from model parameters (default=./)
+"""
 
+    argParser = argparse.ArgumentParser(description=desc,
+        formatter_class = lambda prog: argparse.RawTextHelpFormatter(prog, width=99999))
 
-    spvec = SPVec(corpus_filename='../corpus/bnc_mincount100.txt', windowtype='syn',
-            windowsize=3, jobs=1, model_prefix='spvec_bnc')
-    spvec.make_lr_embeddings(sparse=True)
+    argParser.add_argument('corpus_filename',
+                            metavar = '<corpus-filename>',
+                            help = 'corpus should be pre-processed')
+    argParser.add_argument('model_type',
+                            metavar = '<model-type>',
+                            choices = ['syn','par'],
+                            help='available=syn|par')
+    argParser.add_argument('-w',
+                            '--window-size',
+                            metavar = '',
+                            default = '3',
+                            type = int,
+                            help = 'smaller windows are better (default=3)',
+                            required=False)
+    argParser.add_argument('-d',
+                            '--dimensions',
+                            metavar = '',
+                            default = '300',
+                            help = '(default=300)',
+                            type = int,
+                            required=False)
+    argParser.add_argument('-t',
+                            '--term-weight',
+                            metavar = '',
+                            choices = ['raw','log','pmi','ppmi'],
+                            help = 'available=raw|log|pmi|ppmi (default=log)',
+                            default = 'log')
+    argParser.add_argument('-p',
+                            '--power-factor',
+                            metavar = '',
+                            default = '0.5',
+                            help = '(default=0.5)',
+                            type = float,
+                            required=False)
+    argParser.add_argument('-j',
+                            '--jobs',
+                            metavar = '',
+                            type = int,
+                            help = 'no of CPUs for building the co-occurrence matrix (default={})'.format(int(cpu_count()/2)),
+                            default = int(cpu_count()/2),
+                            required = False)
+    argParser.add_argument('-m',
+                            '--model-prefix',
+                            metavar = '',
+                            help = 'can be used to add some tags to the filneame of the embedding file (default=spvec)',
+                            default = 'spvec',
+                            required = False)
+    argParser.add_argument('-s',
+                            '--save-to',
+                            metavar = '',
+                            default='./',
+                            help = save_to_help,
+                            required = False)
+
+    args = argParser.parse_args()
+
+    spvec = SPVec(corpus_filename = args.corpus_filename,
+                  modeltype = args.model_type,
+                  windowsize = args.window_size,
+                  jobs = args.jobs,
+                  model_prefix =  args.model_prefix)
+
+    spvec.make_embeddings(term_weight = args.term_weight,
+            dim = args.dimensions,
+            p = args.power_factor,
+            save_to = args.save_to)
+    
