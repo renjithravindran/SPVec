@@ -380,7 +380,7 @@ class SPVec:
         print("done ({})".format(delta))
     
 
-    def factorize(self,data_matrix,num_factors):
+    def factorize(self,data_matrix,num_factors,sparse=False):
         """
         perform truncated svd using either sklearn's randomized_svd
         or Radim's sparsesvd
@@ -388,11 +388,23 @@ class SPVec:
 
         print("factorizing...")
         starttime = default_timer()
-        try:
-            u,s,vt = randomized_svd(data_matrix.todense(),num_factors) 
-        except MemoryError:
-            print("Out of Memory, switching to single threaded sparse factorisation")
-            print("Go get a drink, relax...")
+        if not sparse:
+            try:
+                u,s,vt = randomized_svd(data_matrix.todense(),num_factors) 
+            except MemoryError:
+                # this exception does not seem to work in my little laptop!
+                print("Out of Memory, switching to single threaded sparse factorisation")
+                print("sit back, look elsewhere! ")
+                u,s,vt = sparsesvd(data_matrix.tocsc(),num_factors)
+                #u is actually ut
+                u = u.transpose()
+        else:
+            # those machines where MemoryError is not thrown
+            # and factorisation crashes the machine or gets killed
+            # can explicitly choose sparse factorisation
+            # and hopefull get things to work
+            print("single threaded sparse factorisation")
+            print("sit back, look elsewhere! ")
             u,s,vt = sparsesvd(data_matrix.tocsc(),num_factors)
             #u is actually ut
             u = u.transpose()
@@ -404,7 +416,7 @@ class SPVec:
         return u,s,vt
     
 
-    def make_embeddings(self,save_to="./",term_weight='log',dim=300,p=0.5):
+    def make_embeddings(self,save_to="./",term_weight='log',dim=300,p=0.5,sparse=False):
         """
         make low rank embeddings using truncated SVD
         
@@ -423,20 +435,23 @@ class SPVec:
 
         p: int, default=0.5
             scaling power factor of the singular vectors
-            
+        
+        sparse: bool, default=False
+            sparse factorisation 
+            useful in-case dense factorisation runs out of memnory
         """
 
         if term_weight == "raw":
             if ('raw',dim) not in self.tsvd_factors:
                 # check if we have factorized yet
-                u,s,vt = self.factorize(self.coocs_raw,dim)
+                u,s,vt = self.factorize(self.coocs_raw,dim,sparse=sparse)
                 self.tsvd_factors[('raw',dim)] = (u,s,vt)
                 # save the factors
             u,s,vt = self.tsvd_factors[('raw',dim)]
             
         elif term_weight == "log":
             if ('log',dim) not in self.tsvd_factors:
-                u,s,vt = self.factorize(self.coocs_raw.log1p(),dim)
+                u,s,vt = self.factorize(self.coocs_raw.log1p(),dim,sparse=sparse)
                 self.tsvd_factors[('log',dim)] = (u,s,vt)
             u,s,vt = self.tsvd_factors[('log',dim)]
             
@@ -444,11 +459,11 @@ class SPVec:
             if self.coocs_pmi.data.nbytes == 0:
                 #check if pmi is not computed yet
                 self.make_pmiMat()
-                u,s,vt = self.factorize(self.coocs_pmi,dim)
+                u,s,vt = self.factorize(self.coocs_pmi,dim,sparse=sparse)
                 self.tsvd_factors['pmi'] = (u,s,vt)
             elif ('pmi',dim) not in self.tsvd_factors:
                 #pmi is computed but not factorized yet
-                u,s,vt = self.factorize(self.coocs_pmi,dim)
+                u,s,vt = self.factorize(self.coocs_pmi,dim,sparse=sparse)
                 self.tsvd_factors[('pmi',dim)] = (u,s,vt)
             else:
                 #pmi is computed and also factorized
@@ -458,11 +473,11 @@ class SPVec:
             if self.coocs_ppmi.data.nbytes == 0:
                 #check if ppmi is not computed yet
                 self.make_ppmiMat()
-                u,s,vt = self.factorize(self.coocs_ppmi,dim)
+                u,s,vt = self.factorize(self.coocs_ppmi,dim,sparse=sparse)
                 self.tsvd_factors['ppmi'] = (u,s,vt)
             elif ('ppmi',dim) not in self.tsvd_factors:
                 #ppmi is computed but not factorized yet
-                u,s,vt = self.factorize(self.coocs_ppmi,dim)
+                u,s,vt = self.factorize(self.coocs_ppmi,dim,sparse=sparse)
                 self.tsvd_factors[('ppmi',dim)] = (u,s,vt)
             else:
                 #ppmi is computed and also factorized
@@ -714,60 +729,77 @@ renjith p ravindran 2021
     save_to_help="""either a directory or a full filename. if directory the fileame 
 will be formatted from model parameters (default=./)
 """
-
+    
+    formatter = lambda prog: argparse.RawTextHelpFormatter(prog,
+                                                           width=99999,
+                                                           max_help_position=27)
     argParser = argparse.ArgumentParser(description=desc,
-        formatter_class = lambda prog: argparse.RawTextHelpFormatter(prog, width=99999))
+                                        formatter_class = formatter)
 
     argParser.add_argument('corpus_filename',
                             metavar = '<corpus-filename>',
-                            help = 'corpus should be pre-processed')
+                            help = 'single file pre-processed corpus')
     argParser.add_argument('model_type',
                             metavar = '<model-type>',
                             choices = ['syn','par'],
                             help='available=syn|par')
-    argParser.add_argument('-w',
+    argParser.add_argument(
+                           #'-w',
                             '--window-size',
-                            metavar = '',
+                            metavar = 'WIN',
                             default = '3',
                             type = int,
-                            help = 'smaller windows are better (default=3)',
+                            help = '(default=3)',
                             required=False)
-    argParser.add_argument('-d',
+    argParser.add_argument(
+                           #'-d',
                             '--dimensions',
-                            metavar = '',
+                            metavar = 'DIM',
                             default = '300',
                             help = '(default=300)',
                             type = int,
                             required=False)
-    argParser.add_argument('-t',
+    argParser.add_argument(
+                            #'-t',
                             '--term-weight',
-                            metavar = '',
+                            metavar = 'TERM',
                             choices = ['raw','log','pmi','ppmi'],
                             help = 'available=raw|log|pmi|ppmi (default=log)',
                             default = 'log')
-    argParser.add_argument('-p',
+    argParser.add_argument(
+                            #'-p',
                             '--power-factor',
-                            metavar = '',
+                            metavar = 'POW',
                             default = '0.5',
                             help = '(default=0.5)',
                             type = float,
                             required=False)
-    argParser.add_argument('-j',
+    argParser.add_argument(
+                            #'-j',
                             '--jobs',
-                            metavar = '',
+                            metavar = 'JOBS',
                             type = int,
-                            help = 'no of CPUs for building the co-occurrence matrix (default={})'.format(int(cpu_count()/2)),
+                            help = 'no. of CPUs for building the co-occurrence matrix (default={})'.format(int(cpu_count()/2)),
                             default = int(cpu_count()/2),
                             required = False)
-    argParser.add_argument('-m',
+    argParser.add_argument(
+                            #'-u',
+                            '--sparse',
+                            help = 'sparse factorisation in-case factorisation runs out of memeory',
+                            action = 'store_true',
+                            default = False,
+                            required = False)
+    argParser.add_argument(
+                            #'-m',
                             '--model-prefix',
-                            metavar = '',
-                            help = 'can be used to add some tags to the filneame of the embedding file (default=spvec)',
+                            metavar = 'PRE',
+                            help = 'prefix string for embedding filename (default=spvec)',
                             default = 'spvec',
                             required = False)
-    argParser.add_argument('-s',
+    argParser.add_argument(
+                            #'-s',
                             '--save-to',
-                            metavar = '',
+                            metavar = 'FILE',
                             default='./',
                             help = save_to_help,
                             required = False)
@@ -783,5 +815,5 @@ will be formatted from model parameters (default=./)
     spvec.make_embeddings(term_weight = args.term_weight,
             dim = args.dimensions,
             p = args.power_factor,
-            save_to = args.save_to)
-    
+            save_to = args.save_to,
+            sparse = args.sparse)
