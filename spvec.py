@@ -45,11 +45,6 @@ truncated singular values metrics.
 The embeddings are saved in Word2Vec format so that they may
 later be explored using Gensim
 
-Most of the computation is done parallel.  However, due to
-the untyped nature of python the memory requirements are
-pretty high.  More the number of cores you use, more memory
-you need.
-
 NOTE: 
 1)  Currently SPVec expects a pre-processed corpus.
     Common corpus processing such as lower-casing,
