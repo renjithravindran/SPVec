@@ -18,15 +18,15 @@ will be formatted from model parameters (default=./)
                                      allow_abbrev=False,
                                      add_help=False,
                                      formatter_class=formatter)
-    parser.add_argument('--corpus_filename',
+    parser.add_argument('-c', '--corpus-file',
                         required=True,
-                        metavar='<corpus-filename>',
-                        help='single file pre-processed corpus')
-    parser.add_argument('--model_type',
+                        metavar='<corpus-file>',
+                        help='Path to single file pre-processed corpus')
+    parser.add_argument('-mt', '--model-type',
                         default="syn",
                         metavar='<model-type>',
                         choices=['syn', 'par'],
-                        help='available=syn|par')
+                        help='Available=syn|par')
     parser.add_argument(
         # '-w',
         '--window-size',
