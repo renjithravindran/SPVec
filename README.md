@@ -8,17 +8,54 @@ Preferences](http://aclanthology.org/2021.repl4nlp-1.22/).
 Unlike the embedding models such as Word2vec and GloVe, that capture word similarity (paradigmatic
 relations), syntagmatic embeddings capture word associations (syntagmatic relations).
 
-Therefore, it can be used to measure the degree of selectional preference between two words.
+Therefore, it can be used to measure the degree of selectional preference (association) between two words.
 Selectional preferences of words tell how likely two words are to form a syntactic relation.  For
 eg. 'black cat' is more likely than 'blue cat', or that 'eat dinner' is more likely than 'eat tree'.
 Selectional preferences are usually learned from syntactically related word pairs in a parsed
 corpus, but by reducing syntactic relations to directions, syntagmatic embeddings can do pretty well
 simply with a plain corpus.
 
+SPVec gives two embeddings per word, one of left context and other of right context.
+If l_w is the left embedding of a word w and r_w the right embedding,
+then the association between word v to the right of word u is given by cosine(r_u,l_v)
+
+```math
+
+	\begin{table}[H]
+
+	\begin{tabular}{|c|l|}
+	\hline
+		\textbf{word} &\hspace{6.5cm}  \textbf{associations} \\
+	\toprule
+	\hline
+		\multirow{2}{*}{car}&\textbf{left:} vintage, second-hand, oncoming, luxury, buying...\\% toy, saloon, buy, mercedes... \\
+		\cline{2-2}
+		&\textbf{right:} collided, sped, exploded, maker, skidded...\\%, swerved\\%, belonging, makers, roared...  \\
+	\hline
+	\multirow{2}{*}{eat}	 &\textbf{left:} want, wants, going, wanting, let, tend, ought...\\%, let's\\%, allowed, prefer, supposed, able... \\
+		\cline{2-2}
+		& \textbf{right:} salad, beans, soup, cakes, pork, peas, bacon...\\%, pasta, fresh, pie, biscuits... \\
+	\hline
+	\multirow{2}{*}{blue} & \textbf{left:} wore, vivid, dull, wear, luminous, wears, dazzling...\\%, plain, dim, dressed, dyed... \\
+		\cline{2-2}
+		& \textbf{right:} scarf, stripe, livery, robe, beret, overalls, blazer...\\%, slacks, gloves...\\
+	\hline
+		\multirow{2}{*}{aggressive} &\textbf{left:} increasingly, extremely, equally, become, very...\\%, highly, particularly, becoming... \\
+		\cline{2-2}
+		& \textbf{right:} behaviour, attitude, manner, response, towards...\\%, tactics...\\%, stance, attack, actions...\\
+		\toprule
+\end{tabular}
+	\caption{Examples of word associations from syntagmatic embeddings.}
+	\label{tab:examples}
+\end{table}
+
+```
+
+
 
 ## About the Code
 
-All the experiments have been tested on python 3.7 and 3.8. They should run on 3.9 also.
+Our code is tested on python 3.7 and 3.8. They should run on 3.9 also.
 
 The advised way to run any of the scripts is to use a `virtualenv`. You can run:
 
@@ -40,7 +77,7 @@ Download trained embeddings file [here](https://drive.google.com/file/d/1CQ--9Sh
 After that you can use:
 
 ```
-$ python spvec.py [train|eval|query] --help
+$ python spvec.py [learn|eval|query] --help
 ```
 
 to view help on individual commands.
@@ -50,18 +87,18 @@ to view help on individual commands.
 To run the evaluation and see the results, you can run:
 
 ```
-$ python spvec.py eval -m <path-to-embedding-file>
+$ python spvec.py eval --model-file <path-to-embedding-file>
 ```
 
 To query the model on specific words, you can run:
 
 ```
-$ python spvec.py query -m <path-to-embedding-file>
+$ python spvec.py query --model-file <path-to-embedding-file>
 ```
 
 
-## Make embeddings
+## Learn the embeddings
 
 ```
-$ python spvec.py train -c <path-to-corpus> -mt syn
+$ python spvec.py learn --corpus-file <path-to-corpus-file>
 ```
