@@ -1,4 +1,4 @@
-# Syntagmatic Word Embeddings
+# Syntagmatic Word Embeddings (SPVec)
 
 This repository contains a python implementation of the Syntagmatic Word Embedding model of Renjith
 P Ravindran, Akshay Badola and K Narayana Murthy as described in their paper [Syntagmatic Word
@@ -17,41 +17,9 @@ simply with a plain corpus.
 
 SPVec gives two embeddings per word, one of left context and other of right context.
 If l_w is the left embedding of a word w and r_w the right embedding,
-then the association between word v to the right of word u is given by cosine(r_u,l_v)
+then the association between word v to the right of word u is given by cosine(r_u,l_v).
 
-```math
-
-	\begin{table}[H]
-
-	\begin{tabular}{|c|l|}
-	\hline
-		\textbf{word} &\hspace{6.5cm}  \textbf{associations} \\
-	\toprule
-	\hline
-		\multirow{2}{*}{car}&\textbf{left:} vintage, second-hand, oncoming, luxury, buying...\\% toy, saloon, buy, mercedes... \\
-		\cline{2-2}
-		&\textbf{right:} collided, sped, exploded, maker, skidded...\\%, swerved\\%, belonging, makers, roared...  \\
-	\hline
-	\multirow{2}{*}{eat}	 &\textbf{left:} want, wants, going, wanting, let, tend, ought...\\%, let's\\%, allowed, prefer, supposed, able... \\
-		\cline{2-2}
-		& \textbf{right:} salad, beans, soup, cakes, pork, peas, bacon...\\%, pasta, fresh, pie, biscuits... \\
-	\hline
-	\multirow{2}{*}{blue} & \textbf{left:} wore, vivid, dull, wear, luminous, wears, dazzling...\\%, plain, dim, dressed, dyed... \\
-		\cline{2-2}
-		& \textbf{right:} scarf, stripe, livery, robe, beret, overalls, blazer...\\%, slacks, gloves...\\
-	\hline
-		\multirow{2}{*}{aggressive} &\textbf{left:} increasingly, extremely, equally, become, very...\\%, highly, particularly, becoming... \\
-		\cline{2-2}
-		& \textbf{right:} behaviour, attitude, manner, response, towards...\\%, tactics...\\%, stance, attack, actions...\\
-		\toprule
-\end{tabular}
-	\caption{Examples of word associations from syntagmatic embeddings.}
-	\label{tab:examples}
-\end{table}
-
-```
-
-
+![word associations](examples.png "Examples of word associations from syntagmatic embeddings.")
 
 ## About the Code
 
