@@ -40,7 +40,8 @@ After that you can install the requirements with `pip install -r requirements.tx
 
 For the preprocessed (min counted) corpus file (used in paper), you can obtain it from [here](https://drive.google.com/file/d/1fE5kSBHct3bnZE0_NOh3mxixZHdKmPGJ/view?usp=sharing)
 
-Download trained embeddings file [here](https://drive.google.com/file/d/1CQ--9Shrls0kf6pdoza8dDBWNe1SLBd2/view?usp=sharing)
+Download trained embeddings file [here](https://drive.google.com/file/d/1CQ--9Shrls0kf6pdoza8dDBWNe1SLBd2/view?usp=sharing).
+Extract the file (zip) before use.
 
 After that you can use:
 
