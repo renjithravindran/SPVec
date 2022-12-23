@@ -31,14 +31,11 @@ The advised way to run any of the scripts is to use a `virtualenv`. You can run:
 $ python -m venv path-to-environment
 ```
 
-Where `ver` is the python version (one of 3.7, 3.8, 3.9) and `dir` is the directory in which to
-create the env.
-
 After that you can install the requirements with `pip install -r requirements.txt`
 
 ## Data and Model
 
-For the preprocessed (min counted) corpus file (used in paper), you can obtain it from [here](https://drive.google.com/file/d/1fE5kSBHct3bnZE0_NOh3mxixZHdKmPGJ/view?usp=sharing)
+For the preprocessed (min counted) corpus file (used in paper), you can obtain it from [here](https://drive.google.com/file/d/1fE5kSBHct3bnZE0_NOh3mxixZHdKmPGJ/view?usp=sharing).
 
 Download trained embeddings file [here](https://drive.google.com/file/d/1CQ--9Shrls0kf6pdoza8dDBWNe1SLBd2/view?usp=sharing).
 Extract the zip file before use.
